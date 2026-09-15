@@ -1,5 +1,7 @@
 import type { Plugin } from "@opencode-ai/plugin"
+import { execFileSync } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 type Tier = "allow" | "ask" | "deny"
@@ -373,9 +375,12 @@ function detectStack(root: string): string[] {
   return stacks
 }
 
-async function readBranch($: any, root: string): Promise<string | null> {
+function readBranch(root: string): string | null {
   try {
-    const out = await $`git -c safe.directory=* branch --show-current`.cwd(root).quiet().nothrow().text()
+    const out = execFileSync("git", ["-C", root, "-c", "safe.directory=*", "branch", "--show-current"], {
+      cwd: tmpdir(),
+      encoding: "utf8",
+    })
     const branch = String(out).trim()
     return branch || null
   } catch {
@@ -411,10 +416,10 @@ function statusBlock(profile: Profile, env: EnvName, evidence: string, branch: s
   ].join("\n")
 }
 
-export const CehProfile: Plugin = async ({ directory, worktree, $ }) => {
+export const CehProfile: Plugin = async ({ directory, worktree }) => {
   const root = directory || worktree
   const profile = readProfile(root)
-  const branch = await readBranch($, root)
+  const branch = readBranch(root)
   const ambient = detectAmbient(root, branch, profile.environment.mode)
   const stacks = profile.stack.autoDetect ? detectStack(root) : []
   const stash = new Map<string, string>()
