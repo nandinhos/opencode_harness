@@ -69,6 +69,8 @@ const CATASTROPHIC: Array<[RegExp, string]> = [
   [/\bformat\s+[a-z]:/i, "Windows disk format"],
   [/\bdiskpart\b/i, "diskpart destructive partitioning"],
   [/\bRemove-Item\b[^\n]*-Recurse[^\n]*\bC:\\\\?(?:\s|$)/i, "recursive deletion of C: drive"],
+  [/\bFormat-Volume\b/i, "Format-Volume destructive format"],
+  [/\bClear-Disk\b/i, "Clear-Disk destructive wipe"],
 ]
 
 const SAFE_DEV: RegExp[] = [
@@ -102,7 +104,11 @@ const DESTRUCTIVE: Array<[RegExp, string, string]> = [
   [/\bgsutil\s+rm\s+-r\b/i, "gsutil rm -r", "INFRASTRUCTURE"],
   [/\b(?:npm|pnpm|yarn)\s+publish\b/i, "package publish", "PACKAGE"],
   [/\bRemove-Item\b[^\n]*-Recurse[^\n]*-Force/i, "Remove-Item -Recurse -Force", "FILESYSTEM"],
+  [/\bRemove-Item\b[^\n]*-Recurse/i, "Remove-Item -Recurse", "FILESYSTEM"],
   [/\b(?:rmdir|rd)\s+\/s\b/i, "rmdir /s", "FILESYSTEM"],
+  [/\bdel\b[^\n]*\/[fsq]{1,3}\b/i, "del with /f /s /q", "FILESYSTEM"],
+  [/\bFormat-Volume\b/i, "Format-Volume", "INFRASTRUCTURE"],
+  [/\bClear-Disk\b/i, "Clear-Disk", "INFRASTRUCTURE"],
 ]
 
 const DESTRUCTIVE_GLOBS = [
@@ -132,6 +138,10 @@ const DESTRUCTIVE_GLOBS = [
   "*yarn publish*",
   "*Remove-Item*-Recurse*",
   "*rmdir /s*",
+  "*del /f*",
+  "*del /s*",
+  "*Format-Volume*",
+  "*Clear-Disk*",
 ]
 
 const CATASTROPHIC_GLOBS = [
@@ -146,6 +156,8 @@ const CATASTROPHIC_GLOBS = [
   "*gcloud projects delete*",
   "*diskpart*",
   "*format c:*",
+  "*Format-Volume*",
+  "*Clear-Disk*",
 ]
 
 const AGENT_NAMES: Record<string, string> = {
@@ -363,7 +375,7 @@ function detectStack(root: string): string[] {
 
 async function readBranch($: any, root: string): Promise<string | null> {
   try {
-    const out = await $`git branch --show-current`.cwd(root).quiet().nothrow().text()
+    const out = await $`git -c safe.directory=* branch --show-current`.cwd(root).quiet().nothrow().text()
     const branch = String(out).trim()
     return branch || null
   } catch {
