@@ -1,6 +1,6 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import { execFileSync } from "node:child_process"
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -275,6 +275,37 @@ function envFromCommand(command: string): EnvName | null {
   return null
 }
 
+const SEGMENT_SPLIT = /(?:&&|\|\||[;&|\n])/
+const EVAL_FORM =
+  /(?:^|[\s;&|(])(?:bash|sh|zsh|dash|pwsh|powershell|cmd|iex|invoke-expression)\b[^\n]*?(?:\s-c\b|\s-command\b|\s\/c\b|\s\/k\b)/i
+const LEAD_PREFIX = "(?:(?:sudo|env|rtk(?:\\s+proxy)?|time|nohup|command)\\s+)*"
+
+function commandSegments(command: string): string[] {
+  return command
+    .split(SEGMENT_SPLIT)
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+}
+
+function anchoredTest(pattern: RegExp, text: string): boolean {
+  const flags = pattern.flags.includes("i") ? "i" : ""
+  const body = pattern.source.replace(/^\\b/, "")
+  try {
+    return new RegExp("^\\s*" + LEAD_PREFIX + body, flags).test(text)
+  } catch {
+    return pattern.test(text)
+  }
+}
+
+function isCatastrophic(pattern: RegExp, command: string): boolean {
+  for (const segment of commandSegments(command)) {
+    if (anchoredTest(pattern, segment)) return true
+  }
+  if (/[;&|]/.test(pattern.source) && pattern.test(command)) return true
+  if (EVAL_FORM.test(command) && pattern.test(command)) return true
+  return false
+}
+
 function evaluate(command: string, ambient: EnvName, profile: Profile): Verdict {
   const raw = command.trim()
   if (!raw) return { decision: "allow", reason: "Empty command", env: ambient, useCase: "GENERAL" }
@@ -283,7 +314,7 @@ function evaluate(command: string, ambient: EnvName, profile: Profile): Verdict 
   const env = envFromCommand(cmd) ?? ambient
 
   for (const [pattern, reason] of CATASTROPHIC) {
-    if (pattern.test(cmd) || pattern.test(raw)) {
+    if (isCatastrophic(pattern, raw)) {
       return {
         decision: profile.safety.catastrophic,
         reason: `[CEH CATASTROPHIC BLOCK] Hard block: ${reason}.`,
@@ -375,17 +406,55 @@ function detectStack(root: string): string[] {
   return stacks
 }
 
-function readBranch(root: string): string | null {
+type BranchInfo = { branch: string | null; source: string }
+
+function readGitHead(root: string): BranchInfo {
+  try {
+    const gitMarker = join(root, ".git")
+    if (!existsSync(gitMarker)) return { branch: null, source: "no .git marker" }
+    let gitDir = gitMarker
+    if (statSync(gitMarker).isFile()) {
+      const pointer = readFileSync(gitMarker, "utf8").trim()
+      const match = pointer.match(/^gitdir:\s*(.+)$/i)
+      if (!match) return { branch: null, source: ".git file without gitdir" }
+      const target = match[1].trim()
+      gitDir = /^(?:[a-zA-Z]:[\\/]|\\\\|\/)/.test(target) ? target : join(root, target)
+    }
+    const head = readFileSync(join(gitDir, "HEAD"), "utf8").trim()
+    const ref = head.match(/^ref:\s*refs\/heads\/(.+)$/)
+    if (ref) return { branch: ref[1].trim(), source: "fs .git/HEAD" }
+    if (/^[0-9a-f]{40}$/i.test(head)) return { branch: null, source: "detached HEAD" }
+    return { branch: null, source: "unparsable HEAD" }
+  } catch (error) {
+    return { branch: null, source: `fs failed: ${(error as Error).message}` }
+  }
+}
+
+function readBranchFallback(root: string): BranchInfo {
   try {
     const out = execFileSync("git", ["-C", root, "-c", "safe.directory=*", "branch", "--show-current"], {
       cwd: tmpdir(),
       encoding: "utf8",
     })
     const branch = String(out).trim()
-    return branch || null
-  } catch {
-    return null
+    return { branch: branch || null, source: "execFileSync git -C" }
+  } catch (error) {
+    return { branch: null, source: `spawn failed: ${(error as Error).message}` }
   }
+}
+
+function readBranch(root: string): BranchInfo {
+  const head = readGitHead(root)
+  if (head.branch) return head
+  const spawned = readBranchFallback(root)
+  if (spawned.branch) return spawned
+  return { branch: null, source: `fs(${head.source}) + spawn(${spawned.source})` }
+}
+
+function writeStatus(root: string, payload: Record<string, unknown>): void {
+  try {
+    writeFileSync(join(root, ".opencode", ".ceh-status.json"), JSON.stringify(payload, null, 2) + "\n", "utf8")
+  } catch {}
 }
 
 function extractCommand(input: any, stash: Map<string, string>): string {
@@ -419,10 +488,27 @@ function statusBlock(profile: Profile, env: EnvName, evidence: string, branch: s
 export const CehProfile: Plugin = async ({ directory, worktree }) => {
   const root = directory || worktree
   const profile = readProfile(root)
-  const branch = readBranch(root)
-  const ambient = detectAmbient(root, branch, profile.environment.mode)
+  const branchInfo = readBranch(root)
+  const ambient = detectAmbient(root, branchInfo.branch, profile.environment.mode)
   const stacks = profile.stack.autoDetect ? detectStack(root) : []
   const stash = new Map<string, string>()
+
+  writeStatus(root, {
+    generatedAt: new Date().toISOString(),
+    root,
+    rootReachable: existsSync(root),
+    branch: branchInfo.branch,
+    branchSource: branchInfo.source,
+    env: ambient.env,
+    envEvidence: ambient.evidence,
+    topology: profile.environment.topology,
+    stacks,
+    safetyTiers: profile.environment.tiers,
+    catastrophic: profile.safety.catastrophic,
+    agents: Object.entries(AGENT_NAMES)
+      .filter(([key]) => profile.agents[key] !== false)
+      .map(([, name]) => name),
+  })
 
   return {
     config: async (cfg) => {
@@ -462,7 +548,7 @@ export const CehProfile: Plugin = async ({ directory, worktree }) => {
     },
 
     "experimental.chat.system.transform": async (_input, output) => {
-      output.system.push(statusBlock(profile, ambient.env, ambient.evidence, branch, stacks))
+      output.system.push(statusBlock(profile, ambient.env, ambient.evidence, branchInfo.branch, stacks))
     },
   }
 }
