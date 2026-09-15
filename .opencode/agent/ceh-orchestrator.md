@@ -6,7 +6,6 @@ mode: primary
 color: accent
 permission:
   edit: allow
-  bash: allow
   task: allow
 ---
 

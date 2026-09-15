@@ -172,6 +172,8 @@ const AGENT_NAMES: Record<string, string> = {
   evidenceAuditor: "ceh-evidence-auditor",
 }
 
+const READ_ONLY_AGENTS = new Set(["ceh-investigator", "ceh-architect"])
+
 function mergeProfile(base: Profile, override: Partial<Profile>): Profile {
   return {
     ...base,
@@ -522,7 +524,13 @@ export const CehProfile: Plugin = async ({ directory, worktree }) => {
       cfg.agent = cfg.agent ?? {}
       for (const [key, name] of Object.entries(AGENT_NAMES)) {
         const enabled = profile.agents[key] !== false
-        cfg.agent[name] = { ...((cfg.agent as any)[name] ?? {}), disable: !enabled }
+        const existing = (cfg.agent as any)[name] ?? {}
+        const bashPermission = READ_ONLY_AGENTS.has(name) ? "deny" : bash
+        ;(cfg.agent as any)[name] = {
+          ...existing,
+          disable: !enabled,
+          permission: { ...(existing.permission ?? {}), bash: bashPermission },
+        }
       }
       if (profile.agents.orchestrator !== false) cfg.default_agent = "ceh-orchestrator"
     },
@@ -534,7 +542,7 @@ export const CehProfile: Plugin = async ({ directory, worktree }) => {
       stash.set(input.callID, command)
       if (!profile.safety.hardBlockBeforeExecution) return
       const verdict = evaluate(command, ambient.env, profile)
-      if (verdict.decision === "deny" && verdict.useCase === "CATASTROPHIC") throw new Error(verdict.reason)
+      if (verdict.decision === "deny") throw new Error(verdict.reason)
     },
 
     "permission.ask": async (input, output) => {

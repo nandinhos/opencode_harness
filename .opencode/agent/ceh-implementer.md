@@ -6,7 +6,6 @@ mode: subagent
 color: success
 permission:
   edit: allow
-  bash: allow
   task: deny
 ---
 
