@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/nandinhos/antigravity-clearer-engineering-harness/main/.opencode/ceh.profile.schema.json",
+  "title": "CEH Profile (opencode)",
+  "description": "High-level coding profile consumed by the CEH resolver plugin for opencode.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "profile": {
+      "type": "string",
+      "description": "Human-readable preset name for this coding profile.",
+      "examples": ["staff", "minimal", "audit"]
+    },
+    "riskDial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default": { "enum": ["LOW", "MEDIUM", "HIGH"] },
+        "allowEscalation": { "type": "boolean" },
+        "checkpointOnHigh": { "type": "boolean" }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": ["auto", "development", "staging", "production"],
+          "description": "Explicit environment override. 'auto' detects via env vars, .env files and git branch."
+        },
+        "topology": {
+          "enum": ["classic", "enterprise"],
+          "description": "classic = dev -> main, enterprise = dev -> staging -> main."
+        },
+        "tiers": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "development": { "$ref": "#/$defs/tier" },
+            "staging": { "$ref": "#/$defs/tier" },
+            "production": { "$ref": "#/$defs/tier" }
+          }
+        }
+      }
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "catastrophic": { "$ref": "#/$defs/tier" },
+        "enforcePermissionHook": { "type": "boolean" },
+        "hardBlockBeforeExecution": { "type": "boolean" }
+      }
+    },
+    "stack": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "autoDetect": { "type": "boolean" },
+        "language": { "type": "string" },
+        "testRunner": { "type": "string" },
+        "linter": { "type": "string" },
+        "strictTyping": { "type": "boolean" }
+      }
+    },
+    "craftsmanship": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ponytail": { "type": "boolean" },
+        "blastRadius": { "enum": ["minimal", "bounded", "free"] },
+        "rootCauseFirst": { "type": "boolean" },
+        "conventionalCommits": { "type": "boolean" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": { "type": "boolean" },
+        "classes": {
+          "type": "array",
+          "items": { "enum": ["OBSERVED", "INFERRED", "UNKNOWN"] }
+        },
+        "forbidUnsupportedClaims": { "type": "boolean" },
+        "responseContract": { "type": "boolean" }
+      }
+    },
+    "tokenEconomy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "astFirst": { "type": "boolean" },
+        "shellCompression": { "enum": ["auto", "rtk", "off"] },
+        "rtkPrefixes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "agents": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "orchestrator": { "type": "boolean" },
+        "investigator": { "type": "boolean" },
+        "architect": { "type": "boolean" },
+        "implementer": { "type": "boolean" },
+        "testEngineer": { "type": "boolean" },
+        "reviewer": { "type": "boolean" },
+        "evidenceAuditor": { "type": "boolean" }
+      }
+    },
+    "presentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "noPreamble": { "type": "boolean" },
+        "maxListItems": { "type": "integer", "minimum": 1 },
+        "endWithNextStep": { "type": "boolean" }
+      }
+    }
+  },
+  "$defs": {
+    "tier": { "enum": ["allow", "ask", "deny"] }
+  }
+}

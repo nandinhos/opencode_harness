@@ -1,0 +1,61 @@
+{
+  "$schema": "./ceh.profile.schema.json",
+  "profile": "staff",
+  "riskDial": {
+    "default": "MEDIUM",
+    "allowEscalation": true,
+    "checkpointOnHigh": true
+  },
+  "environment": {
+    "mode": "auto",
+    "topology": "classic",
+    "tiers": {
+      "development": "allow",
+      "staging": "ask",
+      "production": "deny"
+    }
+  },
+  "safety": {
+    "catastrophic": "deny",
+    "enforcePermissionHook": true,
+    "hardBlockBeforeExecution": true
+  },
+  "stack": {
+    "autoDetect": true,
+    "language": "auto",
+    "testRunner": "auto",
+    "linter": "auto",
+    "strictTyping": true
+  },
+  "craftsmanship": {
+    "ponytail": true,
+    "blastRadius": "minimal",
+    "rootCauseFirst": true,
+    "conventionalCommits": true
+  },
+  "evidence": {
+    "required": true,
+    "classes": ["OBSERVED", "INFERRED", "UNKNOWN"],
+    "forbidUnsupportedClaims": true,
+    "responseContract": true
+  },
+  "tokenEconomy": {
+    "astFirst": true,
+    "shellCompression": "auto",
+    "rtkPrefixes": ["git", "npm", "pnpm", "yarn", "pytest", "cargo", "docker", "ruff", "php", "composer"]
+  },
+  "agents": {
+    "orchestrator": true,
+    "investigator": true,
+    "architect": true,
+    "implementer": true,
+    "testEngineer": true,
+    "reviewer": true,
+    "evidenceAuditor": true
+  },
+  "presentation": {
+    "noPreamble": true,
+    "maxListItems": 5,
+    "endWithNextStep": true
+  }
+}
